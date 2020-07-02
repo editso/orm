@@ -109,7 +109,7 @@ public class Cascade extends BaseCascade {
                     });
                 }else {
                     try {
-                        c.setValue(e, get(value, c.getReferenceDescription(), 1));
+                        c.setValue(e, get(c.getJoinFieldDescription().getValue(e), c.getReferenceDescription(), 2));
                     } catch (NoMapperFoundException noMapperFoundException) {
                         throw new OrmError(noMapperFoundException);
                     }
@@ -173,7 +173,7 @@ public class Cascade extends BaseCascade {
                 try {
                     refTable = c.getReferenceDescription();
                     if (refTable == null)continue;
-                    columnValue = get(c.getJoinFieldDescription().getValue(element), refTable, maxDep, curDep+1);
+                    columnValue = get(c.getJoinFieldDescription().getValue(element), refTable, maxDep, curDep);
                     c.setValue(element, columnValue);
                 } catch (NoMapperFoundException e) {
                     throw new OrmError(e);

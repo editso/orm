@@ -58,7 +58,7 @@ public class BaseExecute implements Execute  {
 
     @Override
     public boolean execute(boolean close) {
-        logger.debug(parameter.getOrigin());
+        logger.debug(parameter);
         try {
             return curStatement().execute();
         } catch (SQLException e) {
@@ -70,7 +70,7 @@ public class BaseExecute implements Execute  {
 
     @Override
     public ResultSet executeQuery(boolean close) {
-        logger.debug(parameter.getOrigin());
+        logger.debug(parameter);
         try {
             return curStatement().executeQuery();
         } catch (SQLException e) {

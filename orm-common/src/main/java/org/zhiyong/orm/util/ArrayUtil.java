@@ -2,9 +2,8 @@ package org.zhiyong.orm.util;
 
 
 
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.Map;
+import java.sql.SQLException;
+import java.util.*;
 import java.util.function.Function;
 
 public class ArrayUtil {
@@ -39,6 +38,11 @@ public class ArrayUtil {
     }
 
     public static <E> void each(Collection<E> collection, Each<E> each){
+        collection.forEach(each::apply);
+    }
+
+    public static <E> void reverseEach(List<E> collection, Each<E> each){
+        Collections.reverse(collection);
         collection.forEach(each::apply);
     }
 

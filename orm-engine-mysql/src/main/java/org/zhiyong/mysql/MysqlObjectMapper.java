@@ -9,6 +9,7 @@ import org.zhiyong.orm.description.FieldDescription;
 import org.zhiyong.orm.description.TableDescription;
 import org.zhiyong.orm.exceptions.MapperError;
 import org.zhiyong.orm.exceptions.NoMapperFoundException;
+import org.zhiyong.orm.util.ArrayUtil;
 import org.zhiyong.orm.util.JdbcUtils;
 import org.zhiyong.orm.util.StringUtil;
 
@@ -30,25 +31,13 @@ public class MysqlObjectMapper extends BaseObjectMapper {
     }
 
     @Override
-    protected boolean drop(Session session, TableDescription mapper, Set<String> tables) throws SQLException{
-        if (tables.contains(mapper.getName())) return true;
-        tables.add(mapper.getName()); // 避免循环依赖
-        for (ConstraintDescription constraintDescription : mapper.getConstraintDescriptions()) {
-            if (constraintDescription.isCollection()){
-                try {
-                    drop(session, findMapper(constraintDescription.getCollectionTypeClass()), tables);
-                } catch (NoMapperFoundException e) {
-                    logger.error(e);
-                }
-            }
-        }
+    protected boolean dropTable(Session session, TableDescription mapper) throws SQLException{
         session.builder("DROP TABLE IF EXISTS :table").parameter(m->{
             m.set("table", mapper.getName());
         }).execute();
         session.commit();
         return true;
     }
-
 
     private void updateTable(Session session,
                              TableDescription table,
@@ -93,6 +82,14 @@ public class MysqlObjectMapper extends BaseObjectMapper {
 
     protected Session openSession(Connection connection){
         return new SessionImpl(connection);
+    }
+
+    @Override
+    public void dropConstraint(Session session, JdbcUtils.Constraint constraint) {
+        session.builder("ALTER TABLE :table DROP FOREIGN KEY :fk").parameter(p->{
+            p.set(constraint.tableName);
+            p.set(constraint.fkName);
+        }).execute();
     }
 
     @Override

@@ -8,6 +8,7 @@ import org.zhiyong.orm.exceptions.DriverError;
 import org.zhiyong.orm.exceptions.FieldSelectError;
 import org.zhiyong.orm.exceptions.NoMapperFoundException;
 import org.zhiyong.orm.exceptions.OrmError;
+import org.zhiyong.orm.util.ArrayUtil;
 import org.zhiyong.orm.util.JdbcUtils;
 import org.zhiyong.orm.util.PackageUtil;
 import org.zhiyong.orm.util.ReflectionUtil;
@@ -151,32 +152,45 @@ public abstract class BaseObjectMapper implements ObjectMapper {
     public void dropAll() {
         Session session = openSession();
         try {
-            HashSet<String> list = new HashSet<>();
-            for (TableDescription mapper : getMappers()) {
-                drop(session, mapper, list);
-            }
+            ArrayUtil.each(getMappers(), e->dropTableAndConstraint(session, e));
+            session.commit();
         }catch (Exception e){
+            throw new OrmError("删除表失败: " + e.getMessage());
+        }finally {
+            session.close();
+        }
+    }
+
+    public abstract void dropConstraint(Session session, JdbcUtils.Constraint constraint);
+
+    @Override
+    public boolean drop(Class<?> mapper) {
+        Session session = openSession();
+        try {
+            return dropTableAndConstraint(session, findMapper(mapper));
+        } catch (NoMapperFoundException e) {
             throw new OrmError(e);
         }finally {
             session.close();
         }
     }
 
-    @Override
-    public boolean drop(Class<?> mapper) {
-        Session session = openSession();
+    private boolean dropTableAndConstraint(Session session, TableDescription mapper){
         try {
-            return drop(session, findMapper(mapper), new HashSet<>());
-        } catch (NoMapperFoundException e) {
-            return false;
+            ArrayUtil.each(JdbcUtils.tableConstraint(configure.connectionDescription().getDb(),
+                    mapper.getName(),
+                    session.getConnection()), c->{
+                dropConstraint(session, c);
+            });
+            dropTable(session, mapper);
+            return dropTable(session, mapper);
         } catch (SQLException e) {
             throw new OrmError(e);
-        } finally {
-            session.close();
         }
     }
 
-    protected abstract boolean drop(Session session, TableDescription mapper, Set<String> es)throws SQLException;
+    protected abstract boolean dropTable(Session session, TableDescription mapper)throws SQLException;
+
 
     @Override
     public boolean create(Class<?> mapper) {

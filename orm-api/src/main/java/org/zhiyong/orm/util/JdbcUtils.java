@@ -7,10 +7,7 @@ import org.zhiyong.orm.exceptions.NoMapperFoundException;
 import org.zhiyong.orm.interfaces.ReturnFunction;
 
 import java.sql.*;
-import java.util.ArrayList;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 public class JdbcUtils {
     public static Map<String, ColumnInfo[]> tableInfo(String dbName,
@@ -75,6 +72,25 @@ public class JdbcUtils {
         return elements.get(0);
     }
 
+
+    public static Constraint[] tableConstraint(String db,
+                                                            String table,
+                                                            Connection connection) throws SQLException {
+
+        DatabaseMetaData metaData = connection.getMetaData();
+        ResultSet resultSet = metaData.getExportedKeys(db, null, table);
+        Set<Constraint> list = new HashSet<>();
+        while (resultSet.next()){
+            if (resultSet.getString("FKTABLE_NAME") != null){
+                list.add(new Constraint(
+                        resultSet.getString("FKTABLE_NAME"),
+                        resultSet.getString("FK_NAME")));
+            }
+        }
+        return list.toArray(Constraint[]::new);
+    }
+
+
     public final static class ColumnInfo{
         public final String name;
         public final int type;
@@ -104,4 +120,38 @@ public class JdbcUtils {
                     '}';
         }
     }
+
+    public final static class Constraint{
+        public final String tableName;
+        public final String fkName;
+
+        public Constraint(String tableName, String fkName) {
+            this.tableName = tableName;
+            this.fkName = fkName;
+        }
+
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Constraint that = (Constraint) o;
+            return Objects.equals(tableName, that.tableName) &&
+                    Objects.equals(fkName, that.fkName);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(tableName, fkName);
+        }
+
+        @Override
+        public String toString() {
+            return "Constraint{" +
+                    "tableName='" + tableName + '\'' +
+                    ", fkName='" + fkName + '\'' +
+                    '}';
+        }
+    }
+
 }

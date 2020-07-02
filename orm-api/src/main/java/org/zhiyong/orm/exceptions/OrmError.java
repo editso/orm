@@ -1,6 +1,6 @@
 package org.zhiyong.orm.exceptions;
 
-public class OrmError extends Error{
+public class OrmError extends RuntimeException{
     public OrmError() {
         super();
     }
