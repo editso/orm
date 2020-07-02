@@ -27,6 +27,10 @@ public class StringUtil {
         return under.toString();
     }
 
+    public static String under(String ...array){
+        return ArrayUtil.toString(array, "_").replaceAll("[ ]*", "");
+    }
+
     public static String hump(String ...s){
         StringBuilder buffer = new StringBuilder();
         for (int i = 0; i < s.length; i++) {

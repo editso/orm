@@ -2,10 +2,18 @@ package org.zhiyong.orm.api;
 
 
 import java.sql.SQLException;
-import java.sql.Savepoint;
 
+/**
+ * 事物接口
+ */
 public interface Transaction {
-
+    /**
+     * 回滚当前事物
+     */
     void rollback();
-    void close() throws SQLException;
+
+    /**
+     * 关闭事物
+     */
+    void close();
 }

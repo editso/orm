@@ -1,10 +1,10 @@
 package org.zhiyong.orm.api;
 
-import org.zhiyong.format.builder.FormatterFactory;
-import org.zhiyong.format.interfaces.ParameterFormatter;
+import org.zhiyong.format.interfaces.Parameter;
+import org.zhiyong.functional.VoidFunction;
 
+import java.sql.PreparedStatement;
 import java.util.List;
-import java.util.Queue;
 
 /**
  * 查询器
@@ -31,6 +31,8 @@ public interface Query<T> {
      */
     Query<T> filter(String str);
 
-    Execute filter(String sql, VoidFunction<ParameterFormatter> param);
+    Result<T> filter(VoidFunction<Filter<T>> filter);
+
+    Execute filter(String sql, VoidFunction<Parameter<PreparedStatement>> param);
 
 }

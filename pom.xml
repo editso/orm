@@ -14,6 +14,7 @@
         <module>exapmle</module>
         <module>orm-format</module>
         <module>orm-engine-mysql</module>
+        <module>orm-functional</module>
     </modules>
 
     <dependencies>

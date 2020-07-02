@@ -1,11 +1,12 @@
 package org.zhiyong.orm.api;
 
 
-import org.zhiyong.format.interfaces.ParameterFormatter;
+import org.zhiyong.format.interfaces.Parameter;
+import org.zhiyong.orm.description.CacheDescription;
+
 
 import java.sql.Connection;
 import java.sql.PreparedStatement;
-import java.sql.SQLException;
 
 
 /**
@@ -21,6 +22,8 @@ public interface Session {
      * @see Query
      */
     <T>Query<T> query(Class<T> clazz, String ...select);
+
+
     <T>Query<T> query(Class<T> clazz);
 
     <T>T get(Object key, Class<T> mapper);
@@ -69,15 +72,18 @@ public interface Session {
     /**
      * 提交
      */
-    void commit() throws SQLException;
+    void commit();
 
     /**
      * 关闭会话
      */
-    void close() throws SQLException;
+    void close();
 
-    boolean execute(ParameterFormatter formatter);
+    boolean execute(Parameter<PreparedStatement> parameter);
+
+    Connection getConnection();
 
     Exception getException();
+
 
 }

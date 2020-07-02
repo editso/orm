@@ -1,74 +1,167 @@
 package org.zhiyong.mysql;
 
+import org.zhiyong.format.builder.ParameterFactory;
 import org.zhiyong.orm.api.*;
-import org.zhiyong.orm.description.ConnectionDescription;
+import org.zhiyong.orm.base.BaseObjectMapper;
+import org.zhiyong.orm.description.ColumnTypeDescription;
+import org.zhiyong.orm.description.ConstraintDescription;
+import org.zhiyong.orm.description.FieldDescription;
 import org.zhiyong.orm.description.TableDescription;
-import org.zhiyong.orm.util.PackageUtil;
+import org.zhiyong.orm.exceptions.MapperError;
+import org.zhiyong.orm.exceptions.NoMapperFoundException;
+import org.zhiyong.orm.util.JdbcUtils;
+import org.zhiyong.orm.util.StringUtil;
 
 import java.sql.Connection;
-import java.sql.DriverManager;
 import java.sql.SQLException;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
+import java.util.*;
 
 
-public class MysqlObjectMapper implements ObjectMapper {
-    private Configure configure;
-    private Connection connection;
-    private TableDescription[] tables;
-    private Create create;
-    private FieldTypeSelector selector;
-    private ConnectionDescription connectionDescription;
-
-    private void initTables(){
-        List<TableDescription> classes = new ArrayList<>();
-        for (String s : configure.mapperPackages()){
-            classes.addAll(Arrays.asList(TableDescription.descriptions(PackageUtil.scannerClass(s), selector)));
-        }
-        tables = classes.toArray(TableDescription[]::new);
-        for (TableDescription table : tables) {
-            Global.add(table.getClazz(), table);
-        }
-        Session session = openSession();
-        Transaction transaction = session.beginTransaction();
-        for (TableDescription table : tables) {
-            try {
-                create.createTable(openSession(), table);
-            } catch (SQLException e) {
-                e.printStackTrace();
-                transaction.rollback();
-            }
-        }
-    }
-
-    public TableDescription[] getTables() {
-        return tables;
-    }
-
+public class MysqlObjectMapper extends BaseObjectMapper {
 
     @Override
-    public void init(Configure configure) {
-        this.configure = configure;
-        this.connectionDescription = configure.connect();
-        try {
-            Class.forName(connectionDescription.getDriver());
-            connection = DriverManager.getConnection(connectionDescription.toUri());
-            create = new MysqlCreate();
-            selector = new MysqlFieldTypeSelector();
-            connection.setAutoCommit(false);
-            initTables();
-        } catch (Exception e) {
-            e.printStackTrace();
+    public boolean autoCommit() {
+        return false;
+    }
+
+    @Override
+    public Class<? extends FieldTypeSelector> getFieldTypeSelector() {
+        return MysqlFieldTypeSelector.class;
+    }
+
+    @Override
+    protected boolean drop(Session session, TableDescription mapper, Set<String> tables) throws SQLException{
+        if (tables.contains(mapper.getName())) return true;
+        tables.add(mapper.getName()); // 避免循环依赖
+        for (ConstraintDescription constraintDescription : mapper.getConstraintDescriptions()) {
+            if (constraintDescription.isCollection()){
+                try {
+                    drop(session, findMapper(constraintDescription.getCollectionTypeClass()), tables);
+                } catch (NoMapperFoundException e) {
+                    logger.error(e);
+                }
+            }
+        }
+        session.builder("DROP TABLE IF EXISTS :table").parameter(m->{
+            m.set("table", mapper.getName());
+        }).execute();
+        session.commit();
+        return true;
+    }
+
+
+    private void updateTable(Session session,
+                             TableDescription table,
+                             FieldDescription[] field,
+                             JdbcUtils.ColumnInfo[] columnInfo){
+        logger.debug("更新表: " + table.getName());
+        ColumnTypeDescription type;
+        JdbcUtils.ColumnInfo column;
+        int stat = 1;
+        for (int i = 0, c = 0; i < field.length; i++, c++) {
+            FieldDescription description  = field[i];
+            type = description.getColumnTypeDescription();
+            if (columnInfo.length <= c){
+                stat = 2;
+            }
+            if (stat == 2){
+                //  添加字段
+                session.builder("ALTER TABLE :table ADD :field :type ${NOT NULL}").parameter(m->{
+                    m.set("table", table.getName());
+                    m.set("field", description.getName());
+                    m.set("type", description.getType());
+                }).execute();
+                stat = 1;
+            }else {
+                column = columnInfo[i];
+                if (!column.name.equals(description.getName())){
+                    stat = 2; // 更新字段
+                    i--;
+                    continue;
+                }
+                if (column.type != type.getType() || (type.getLength() != null && !type.getLength().equals(column.length))){
+                    session.builder("ALTER TABLE :table MODIFY :field :type").parameter(m->{
+                        m.set("table", table.getName());
+                        m.set("field", description.getName());
+                        m.set("type", description.getType());
+                    }).execute();
+                }
+            }
+        }
+
+    }
+
+    protected Session openSession(Connection connection){
+        return new SessionImpl(connection);
+    }
+
+    @Override
+    protected boolean create(Session session,
+                             TableDescription mapper,
+                             Map<String, JdbcUtils.ColumnInfo[]> tableInfos,
+                             Set<String> tables) {
+        if (tables.contains(mapper.getName())) return true;
+        tables.add(mapper.getName()); // 避免循环依赖导致多次创建
+        for (ConstraintDescription constraintDescription : mapper.getConstraintDescriptions()) {
+            if (!constraintDescription.isCollection()){
+                try {
+                    create(session, findMapper(constraintDescription.getTypeClass()), tableInfos, tables);
+                } catch (NoMapperFoundException e) {
+                    logger.error(e);
+                }
+            }
+        }
+        JdbcUtils.ColumnInfo[] columns = tableInfos.get(mapper.getName());
+        if (columns != null){
+            updateTable(session, mapper, mapper.getFieldDescription(), columns);
+            return true;
+        }
+        createTable(session, mapper);
+        return true;
+    }
+
+    private void createTable(Session session, TableDescription mapper) {
+        ParameterFactory.functional("CREATE TABLE IF NOT EXISTS :table(:fields);")
+                .by("fields", ":name :type ${PRIMARY KEY, UNIQUE,NOT NULL,AUTO_INCREMENT}", mapper.getFieldDescription(), (f, e)->{
+                    f.set("name", e.getName())
+                            .set("type", e.getType())
+                            .setOption("UNIQUE", e.unique())
+                            .setOption("NOTNULL", !e.nullable())
+                            .setOption("PRIMARYKEY", e.isPrimaryKey())
+                            .setOption("AUTO_INCREMENT", e.isAutoIncrement());
+                }).by(mapper, (f, e)->{
+                    f.set("table", e.getName());
+                    session.builder(f.transform()).execute();
+                });
+        session.commit();
+        for (ConstraintDescription constraintDescription : mapper.getConstraintDescriptions()) {
+            alterConstraint(session, mapper, constraintDescription);
         }
     }
 
-    public Session openSession(){
+    private void alterConstraint(Session session, TableDescription mapper, ConstraintDescription description){
+        if (description.isCollection())return;
         try {
-            return new SessionImpl(connection);
-        }catch (Exception e){
-            throw new Error(e.getMessage());
+            TableDescription ref  = findMapper(description.getTypeClass());
+            session.builder("ALTER TABLE :table ADD CONSTRAINT :name FOREIGN KEY(:key) REFERENCES :ref(:column)")
+                    .parameter(f->{
+                f.set("table", mapper.getName())
+                .set("name", StringUtil.under("FK", mapper.getName().toUpperCase(), description.getJoinColumn().toUpperCase()))
+                .set("key", description.getSqlJoinColumn())
+                .set("ref", ref.getName())
+                .set("column", ref.getPrimaryKey().getName());
+            }).execute();
+            session.commit();
+        } catch (NoMapperFoundException e) {
+            throw new MapperError(mapper.getClazz());
         }
+
     }
 
+    private void dropConstraint(Session session, TableDescription mapper, ConstraintDescription description){
+        session.builder("ALTER TABLE :table DROP FOREIGN KEY :name").parameter(f->{
+            f.set("table", mapper.getName())
+             .set("name", StringUtil.under("FK", mapper.getName().toUpperCase(), description.getJoinColumn().toUpperCase()));
+        }).execute();
+    }
 }
